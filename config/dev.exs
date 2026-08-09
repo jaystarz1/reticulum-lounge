@@ -173,7 +173,33 @@ config :ret, RetWeb.Plugs.AddCSP,
   media_src: asset_hosts,
   manifest_src: asset_hosts
 
-config :ret, Ret.Mailer, adapter: Swoosh.Adapters.Logger, log_full_email: true
+# private-quest-lounge: real email delivery. GMAIL_WEBHOOK_URL (Apps Script,
+# sends as the operator's own Gmail address) takes precedence, then SMTP,
+# otherwise the upstream log-only mailer.
+if System.get_env("GMAIL_WEBHOOK_URL") do
+  config :ret, Ret.Mailer,
+    adapter: Ret.GmailWebhookMailer,
+    webhook_url: System.get_env("GMAIL_WEBHOOK_URL")
+
+  config :ret, RetWeb.Email, from: System.get_env("SMTP_FROM") || "jay@barkerhrs.com"
+else
+if System.get_env("SMTP_SERVER") do
+  config :ret, Ret.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: System.get_env("SMTP_SERVER"),
+    port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
+    username: System.get_env("SMTP_USERNAME"),
+    password: System.get_env("SMTP_PASSWORD"),
+    auth: :always,
+    tls: :always,
+    ssl: false,
+    retries: 3
+
+  config :ret, RetWeb.Email, from: System.get_env("SMTP_FROM") || "lounge@send.hushhollow.ca"
+else
+  config :ret, Ret.Mailer, adapter: Swoosh.Adapters.Logger, log_full_email: true
+end
+end
 
 config :ret, RetWeb.Email, from: "info@hubs-mail.com"
 
