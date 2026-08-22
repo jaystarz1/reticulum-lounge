@@ -14,7 +14,7 @@ set = fn key, value ->
 end
 
 set.("features|default_room_size", 2)
-set.("features|max_room_size", 2)
+set.("features|max_room_size", 4)  # 2 people + TV client + 1 spare (ghost tabs)
 set.("features|disable_room_creation", true)
 set.("features|disable_sign_up", true)
 # restrictive member permissions: no media spawning/drawing/camera/emoji/fly,

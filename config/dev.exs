@@ -8,6 +8,7 @@ host = System.get_env("RET_HOST") || "hubs.local"
 public_port = String.to_integer(System.get_env("RET_PUBLIC_PORT") || "4000")
 public_assets_host = System.get_env("RET_PUBLIC_ASSETS_HOST")
 public_voice_host = System.get_env("RET_PUBLIC_VOICE_HOST")
+public_runtime = System.get_env("PUBLIC_RUNTIME") == "true"
 cors_proxy_host = "hubs-proxy.local"
 assets_host = "hubs-assets.local"
 link_host = "hubs-link.local"
@@ -35,8 +36,8 @@ config :ret, RetWeb.Endpoint,
   assets_url: [scheme: "https", host: assets_host, port: 4000],
   link_url: [scheme: "https", host: link_host, port: 4000],
   imgproxy_url: [scheme: "http", host: host, port: 5000],
-  debug_errors: true,
-  code_reloader: true,
+  debug_errors: !public_runtime,
+  code_reloader: !public_runtime,
   check_origin: false,
   # This config value is for local development only.
   secret_key_base: "txlMOtlaY5x3crvOCko4uV5PM29ul3zGo1oBGNO3cDXx+7GHLKqt0gR9qzgThxb5",
@@ -59,24 +60,26 @@ config :ret, RetWeb.Endpoint,
 # configured to run both http and https servers on
 # different ports.
 
-# Watch static and templates for browser reloading.
-config :ret, RetWeb.Endpoint,
-  # static_url: [scheme: "https", host: "assets-prod.reticulum.io", port: 443],
-  live_reload: [
-    patterns: [
-      ~r{priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$},
-      ~r{priv/gettext/.*(po)$},
-      ~r{lib/ret_web/views/.*(ex)$},
-      ~r{lib/ret_web/templates/.*(eex)$}
+unless public_runtime do
+  # Watch static and templates only during local development.
+  config :ret, RetWeb.Endpoint,
+    live_reload: [
+      patterns: [
+        ~r{priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$},
+        ~r{priv/gettext/.*(po)$},
+        ~r{lib/ret_web/views/.*(ex)$},
+        ~r{lib/ret_web/templates/.*(eex)$}
+      ]
     ]
-  ]
+end
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"
+config :logger, level: if(public_runtime, do: :info, else: :debug)
 
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
-config :phoenix, :stacktrace_depth, 20
+config :phoenix, :stacktrace_depth, if(public_runtime, do: 8, else: 20)
 
 # Configure your database
 config :ret, Ret.Repo,
