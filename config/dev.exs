@@ -186,22 +186,22 @@ if System.get_env("GMAIL_WEBHOOK_URL") do
 
   config :ret, RetWeb.Email, from: System.get_env("SMTP_FROM") || "jay@barkerhrs.com"
 else
-if System.get_env("SMTP_SERVER") do
-  config :ret, Ret.Mailer,
-    adapter: Swoosh.Adapters.SMTP,
-    relay: System.get_env("SMTP_SERVER"),
-    port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
-    username: System.get_env("SMTP_USERNAME"),
-    password: System.get_env("SMTP_PASSWORD"),
-    auth: :always,
-    tls: :always,
-    ssl: false,
-    retries: 3
+  if System.get_env("SMTP_SERVER") do
+    config :ret, Ret.Mailer,
+      adapter: Swoosh.Adapters.SMTP,
+      relay: System.get_env("SMTP_SERVER"),
+      port: String.to_integer(System.get_env("SMTP_PORT") || "587"),
+      username: System.get_env("SMTP_USERNAME"),
+      password: System.get_env("SMTP_PASSWORD"),
+      auth: :always,
+      tls: :always,
+      ssl: false,
+      retries: 3
 
-  config :ret, RetWeb.Email, from: System.get_env("SMTP_FROM") || "lounge@send.hushhollow.ca"
-else
-  config :ret, Ret.Mailer, adapter: Swoosh.Adapters.Logger, log_full_email: true
-end
+    config :ret, RetWeb.Email, from: System.get_env("SMTP_FROM") || "lounge@send.hushhollow.ca"
+  else
+    config :ret, Ret.Mailer, adapter: Swoosh.Adapters.Logger, log_full_email: true
+  end
 end
 
 config :ret, RetWeb.Email, from: "info@hubs-mail.com"
@@ -246,4 +246,8 @@ config :ret, Ret.Locking, lock_timeout_ms: 1000 * 60 * 15
 
 config :ret, Ret.Repo.Migrations.AdminSchemaInit, postgrest_password: "password"
 config :ret, Ret.StatsJob, node_stats_enabled: false, node_gauges_enabled: false
-config :ret, Ret.Coturn, realm: "ret"
+turn_urls = System.get_env("LOUNGE_TURN_URLS", "") |> String.split(",", trim: true)
+
+config :ret, Ret.Coturn,
+  realm: if(public_runtime && turn_urls == [], do: nil, else: "ret"),
+  public_urls: turn_urls

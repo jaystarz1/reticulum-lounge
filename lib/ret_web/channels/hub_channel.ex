@@ -31,6 +31,7 @@ defmodule RetWeb.HubChannel do
     "add_owner",
     "remove_owner",
     "message",
+    "lounge_social:event",
     "block",
     "unblock",
     # See internal_naf_event_for/2
@@ -458,6 +459,64 @@ defmodule RetWeb.HubChannel do
     {:noreply, socket}
   end
 
+  def handle_in("lounge_social:send", payload, socket) do
+    now = System.monotonic_time(:millisecond)
+    limits = socket.assigns[:lounge_social_limits] || %{}
+
+    case Ret.LoungeSocial.rate_limit(limits, payload, now) do
+      {:ok, limits} ->
+        socket = assign(socket, :lounge_social_limits, limits)
+
+        with {:ok, message} <- Ret.LoungeSocial.validate(payload),
+             :ok <-
+               Ret.LoungeSocial.authorize(
+                 message,
+                 socket.assigns.session_id,
+                 socket.assigns.presence,
+                 Presence.list(socket),
+                 socket.assigns.blocked_session_ids,
+                 socket.assigns.blocked_by_session_ids
+               ) do
+          event =
+            Ret.LoungeSocial.stamp(
+              message,
+              socket.assigns.session_id,
+              System.system_time(:millisecond)
+            )
+
+          broadcast!(socket, "lounge_social:event", event)
+          {:reply, {:ok, event}, socket}
+        else
+          {:error, reason} -> {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+        end
+
+      {:error, reason, limits} ->
+        {:reply, {:error, %{reason: Atom.to_string(reason)}},
+         assign(socket, :lounge_social_limits, limits)}
+    end
+  end
+
+  def handle_in("lounge_view:get", _, socket) do
+    {:reply, {:ok, Ret.LoungeView.get(hub_for_socket(socket).hub_id)}, socket}
+  end
+
+  def handle_in("lounge_view:set", %{"name" => name}, socket)
+      when name in ["day", "dusk", "night"] do
+    hub = hub_for_socket(socket)
+    account = Guardian.Phoenix.Socket.current_resource(socket)
+    now = System.monotonic_time(:millisecond)
+    previous = socket.assigns[:lounge_view_changed_at]
+
+    if Hub.perms_for_account(hub, account)[:spawn_and_move_media] &&
+         (is_nil(previous) || now - previous >= 300) do
+      state = Ret.LoungeView.set(hub.hub_id, name)
+      broadcast!(socket, "lounge_view:state", state)
+      {:reply, {:ok, state}, assign(socket, :lounge_view_changed_at, now)}
+    else
+      {:reply, {:error, %{reason: "not_allowed_or_rate_limited"}}, socket}
+    end
+  end
+
   def handle_in("list_entities", _, socket) do
     hub = socket |> hub_for_socket
     entities = Ret.list_entities(hub.hub_id)
@@ -751,6 +810,19 @@ defmodule RetWeb.HubChannel do
 
     socket
     |> maybe_push_naf("naf", payload, block_naf, blocked_session_ids, blocked_by_session_ids)
+  end
+
+  def handle_out("lounge_social:event" = event, payload, socket) do
+    if Ret.LoungeSocial.visible?(
+         payload,
+         socket.assigns.presence,
+         socket.assigns.blocked_session_ids,
+         socket.assigns.blocked_by_session_ids
+       ) do
+      push(socket, event, payload)
+    end
+
+    {:noreply, socket}
   end
 
   def handle_out("mute" = event, %{"session_id" => session_id} = payload, socket) do
